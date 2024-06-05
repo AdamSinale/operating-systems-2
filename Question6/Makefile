@@ -1,5 +1,5 @@
 # Name of the executable
-TARGET = mynetcat 
+TARGET = mynetcat
 
 # Source files
 SRC = mynetcat.c 
@@ -8,7 +8,7 @@ SRC = mynetcat.c
 CC = gcc
 
 # Compiler flags
-CFLAGS = -Wall -Wextra -std=c11 -g
+CFLAGS = -Wall -Wextra -std=c11 -g -ftest-coverage -fprofile-arcs
 
 # Default rule - compile the program
 all: $(TARGET)
@@ -19,7 +19,16 @@ $(TARGET): $(SRC)
 
 # Rule to clean up generated files
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGET) *.gcno *.gcda *.gcov input_file.txt client_output.txt
 
-# Declare clean as a phony target
-.PHONY: clean
+# Rule to generate code coverage
+coverage: all
+	./run_tests.sh
+	gcov mynetcat.c
+
+# Declare clean and coverage as phony targets
+.PHONY: all clean coverage
+
+# chmod +x run_tests.sh
+# make clean
+# make coverage
