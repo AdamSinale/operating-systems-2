@@ -98,7 +98,7 @@ int start_tcp_server(int port, char mode, char args[9]){
     return 0;    
 }
 
-int start_tcp_client(const char *hostname, int port, char mode) {
+int start_tcp_client(const char *hostname, int port ) {
     int sock = 0;
     struct sockaddr_in serv_addr;
     struct hostent *he;
@@ -234,7 +234,7 @@ int start_udp_server(int port, char mode, char args[9]) {
     return 0;
 }
 
-int start_udp_client(const char *hostname, int port, char mode) {
+int start_udp_client(const char *hostname, int port) {
     int sock = 0;
     struct sockaddr_in serv_addr;
     struct hostent *he;
@@ -377,7 +377,7 @@ int start_uds_stream_server(const char *path, char mode, char args[9]) {
     return 0;
 }
 
-int start_uds_stream_client(const char *path, char mode) {
+int start_uds_stream_client(const char *path) {
     int sock = 0;
     struct sockaddr_un serv_addr;
     char buffer[255];
@@ -504,7 +504,7 @@ int start_uds_dgram_server(const char *path, char mode, char args[9]) {
     return 0;
 }
 
-int start_uds_dgram_client(const char *path, char mode) {
+int start_uds_dgram_client(const char *path) {
     int sock = 0;
     struct sockaddr_un serv_addr;
     char buffer[255];
@@ -606,18 +606,18 @@ int main(int argc, char *argv[]) {
         else if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
             if (strncmp(argv[i + 1], "UDSCD", 5) == 0) {
                 const char *path = argv[++i] + 5;
-                start_uds_dgram_client(path, mode);
+                start_uds_dgram_client(path);
             }
             if (strncmp(argv[i + 1], "UDSCS", 5) == 0) {
                 const char *path = argv[++i] + 5;
-                start_uds_stream_client(path, mode);
+                start_uds_stream_client(path);
             }
             if (strncmp(argv[i + 1], "UDPC", 4) == 0) {
                 char *host_port = argv[++i] + 4;
                 char *host = strtok(host_port, ",");
                 if (host != NULL) {
                     int port = atoi(strtok(NULL, ","));
-                    start_udp_client(host, port, mode);
+                    start_udp_client(host, port);
                 }
                 return 0;
             }
@@ -626,7 +626,7 @@ int main(int argc, char *argv[]) {
                 char *host = strtok(host_port, ",");
                 if (host != NULL){
                     int port = atoi(strtok(NULL, ","));
-                    start_tcp_client(host, port, mode);
+                    start_tcp_client(host, port);
                 }
                 return 0;
             }

@@ -96,7 +96,7 @@ int start_tcp_server(int port, char mode, char args[9]){
     return 0;    
 }
 
-int start_tcp_client(const char *hostname, int port, char mode) {
+int start_tcp_client(const char *hostname, int port) {
     int sock = 0;
     struct sockaddr_in serv_addr;
     struct hostent *he;
@@ -196,7 +196,7 @@ int main(int argc, char *argv[]){
                 char *host = strtok(host_port, ",");
                 if (host != NULL){
                     int port = atoi(strtok(NULL, ","));
-                    start_tcp_client(host, port, mode);
+                    start_tcp_client(host, port);
                 }
             }
         }
