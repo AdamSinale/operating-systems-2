@@ -1,0 +1,530 @@
+        -:    0:Source:mynetcat.c
+        -:    0:Graph:mynetcat.gcno
+        -:    0:Data:mynetcat.gcda
+        -:    0:Runs:28
+        -:    1:#include <stdio.h>
+        -:    2:#include <stdlib.h>
+        -:    3:#include <string.h>
+        -:    4:#include <unistd.h>
+        -:    5:#include <sys/socket.h>
+        -:    6:#include <sys/un.h>
+        -:    7:#include <fcntl.h>
+        -:    8:#include <errno.h>
+        -:    9:#include <arpa/inet.h>
+        -:   10:#include <netdb.h>
+        -:   11:#include <signal.h>
+        -:   12:#include <sys/select.h>
+        -:   13:#include <asm-generic/socket.h>
+        -:   14:
+        6:   15:int start_tcp_server(int port, char mode, char args[9]){
+        6:   16:    printf("server received mode %c\n", mode);
+        6:   17:    printf("bot will play %s\n", args);
+        -:   18:
+        -:   19:    int server_fd;
+        -:   20:    struct sockaddr_in address;
+        6:   21:    int opt = 1;
+        6:   22:    int addrlen = sizeof(address);
+        -:   23:
+       6*:   24:    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0){ perror("socket failed"); exit(EXIT_FAILURE); }
+        -:   25:
+       6*:   26:    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))){ perror("setsockopt"); exit(EXIT_FAILURE); }
+        -:   27:
+        6:   28:    address.sin_family = AF_INET;
+        6:   29:    address.sin_addr.s_addr = INADDR_ANY;
+        6:   30:    address.sin_port = htons(port);
+        -:   31:
+       6*:   32:    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0){ perror("bind failed"); exit(EXIT_FAILURE); }
+        -:   33:
+       6*:   34:    if (listen(server_fd, 1) < 0){ perror("listen"); exit(EXIT_FAILURE); }
+        -:   35:
+        -:   36:    int new_socket;
+       6*:   37:    if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen)) < 0){ perror("accept"); exit(EXIT_FAILURE); }
+        -:   38:
+        6:   39:    printf("accepted with mode %c\n", mode);
+        6:   40:    sleep(1);
+        6:   41:    write(new_socket, &mode, 1);
+        6:   42:    sleep(1);
+        -:   43:
+        6:   44:    pid_t pid = fork();
+       6*:   45:    if (pid < 0) { printf("fork failed"); close(new_socket); close(server_fd); exit(EXIT_FAILURE); }
+        -:   46:
+        6:   47:    if (pid == 0) { // Child process
+    #####:   48:        switch (mode) {
+    #####:   49:            case 'i':
+    #####:   50:                dup2(new_socket, STDIN_FILENO); break;
+    #####:   51:            case 'b':
+    #####:   52:                dup2(new_socket, STDIN_FILENO);
+    #####:   53:                dup2(new_socket, STDOUT_FILENO); break;
+        -:   54:        }
+    #####:   55:        close(server_fd);
+        -:   56:        
+    #####:   57:        char *args1[] = {"ttt", args, NULL};
+    #####:   58:        char *path = "../Question1/ttt";
+    #####:   59:        execvp(path, args1);
+        -:   60:        // If execvp fails
+    #####:   61:        perror("execvp failed"); exit(EXIT_FAILURE);
+        -:   62:    } else {
+        6:   63:        printf("parent process\n");
+        6:   64:        waitpid(pid, NULL, 0);
+        6:   65:        printf("game finished\n");
+        6:   66:        close(new_socket);
+        -:   67:    }
+        -:   68:
+        6:   69:    close(server_fd);
+        6:   70:    return 0;    
+        -:   71:}
+        -:   72:
+        6:   73:int start_tcp_client(const char *hostname, int port) {
+        6:   74:    int sock = 0;
+        -:   75:    struct sockaddr_in serv_addr;
+        -:   76:    struct hostent *he;
+        -:   77:    char buffer[255];
+        -:   78:
+       6*:   79:    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) { printf("\nSocket creation error\n"); return -1; }
+        -:   80:
+       6*:   81:    if ((he = gethostbyname(hostname)) == NULL) { printf("\nInvalid hostname\n"); return -1; }
+        -:   82:
+        6:   83:    serv_addr.sin_family = AF_INET;
+        6:   84:    serv_addr.sin_port = htons(port);
+        6:   85:    memcpy(&serv_addr.sin_addr, he->h_addr_list[0], he->h_length);
+        -:   86:
+       6*:   87:    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) { printf("\nConnection Failed\n"); return -1; }
+        -:   88:
+        6:   89:    printf("connection made, put input:\n");
+        -:   90:    // Make the socket non-blocking
+        6:   91:    memset(buffer, 0, sizeof(buffer));
+        6:   92:    size_t bytesRead = read(sock, buffer, sizeof(buffer)-1);
+       6*:   93:    if(bytesRead < 1){ printf("problem receiving mode"); return -1; }
+        6:   94:    char mode = buffer[0];
+        6:   95:    printf("servers mode is %c\n", mode);
+       24:   96:    while (1) {
+       30:   97:        if(mode == 'b'){
+       15:   98:            sleep(0.01);
+       15:   99:            printf("\n");
+       15:  100:            memset(buffer, 0, sizeof(buffer));
+       15:  101:            size_t bytesRead = read(sock, buffer, sizeof(buffer)-1);
+       15:  102:            buffer[bytesRead] = '\0';
+      15*:  103:            if(bytesRead <= 0){ printf("problem receiving"); return -1; }
+       15:  104:            printf("%s\n",buffer);
+       15:  105:            if(buffer[bytesRead-2] == 'n' || buffer[bytesRead-2] == 'W' || buffer[bytesRead-2] == 't'){ break; }
+        -:  106:        }
+       28:  107:        printf("Enter position to play (single character). (0 for exit)\n");
+       28:  108:        char input = getchar();
+       28:  109:        getchar(); // Consume the newline character
+       28:  110:        write(sock, &input, 1); // Send a single character
+       28:  111:        if (input == '0') { // Check for exit condition
+        4:  112:            break;
+        -:  113:        }
+       24:  114:        printf("Sent: %c\n", input);
+       24:  115:        fflush(stdout);
+        -:  116:    }
+        6:  117:    close(sock);
+        6:  118:    return 0;
+        -:  119:}
+        -:  120:
+        3:  121:int start_udp_server(int port, char mode, char args[9]) {
+        3:  122:    printf("server received mode %c\n", mode);
+        3:  123:    printf("bot will play %s\n", args);
+        -:  124:
+        -:  125:    int server_fd;
+        -:  126:    struct sockaddr_in server_address, client_address;
+        -:  127:    char buffer[1024];
+        3:  128:    socklen_t client_len = sizeof(client_address);
+        -:  129:
+       3*:  130:    if ((server_fd = socket(AF_INET, SOCK_DGRAM, 0)) == 0) { perror("socket failed"); exit(EXIT_FAILURE); }
+        -:  131:
+        3:  132:    memset(&server_address, 0, sizeof(server_address));
+        3:  133:    server_address.sin_family = AF_INET;
+        3:  134:    server_address.sin_addr.s_addr = INADDR_ANY;
+        3:  135:    server_address.sin_port = htons(port);
+        -:  136:
+       3*:  137:    if (bind(server_fd, (struct sockaddr *)&server_address, sizeof(server_address)) < 0) { perror("bind failed"); exit(EXIT_FAILURE); }
+        -:  138:
+        3:  139:    printf("Waiting for a client to connect...\n");
+        -:  140:
+        -:  141:    // Receive initial connection from client
+        3:  142:    recvfrom(server_fd, buffer, sizeof(buffer), 0, (struct sockaddr *)&client_address, &client_len);
+        -:  143:
+        3:  144:    printf("accepted with mode %c\n", mode);
+        3:  145:    sleep(1);
+        -:  146:
+        3:  147:    pid_t pid = fork();
+       3*:  148:    if (pid < 0) { printf("fork failed"); close(server_fd); exit(EXIT_FAILURE); }
+        -:  149:
+        3:  150:    if (pid == 0) { // Child process
+    #####:  151:        switch (mode) {
+    #####:  152:            case 'i':
+    #####:  153:                dup2(server_fd, STDIN_FILENO); break;
+    #####:  154:            default:
+    #####:  155:                break;
+        -:  156:        }
+    #####:  157:        close(server_fd);
+        -:  158:
+    #####:  159:        char *args1[] = {"ttt", args, NULL};
+    #####:  160:        char *path = "../Question1/ttt";
+    #####:  161:        execvp(path, args1);
+        -:  162:        // If execvp fails
+    #####:  163:        perror("execvp failed"); exit(EXIT_FAILURE);
+        -:  164:    } else {
+        -:  165:        // Parent process
+        3:  166:        waitpid(pid, NULL, 0);
+        3:  167:        printf("game finished\n");
+        3:  168:        sendto(server_fd, "1", 1, 0, (struct sockaddr *)&client_address, client_len);
+        3:  169:        close(server_fd);
+        -:  170:    }
+        -:  171:
+        3:  172:    return 0;
+        -:  173:}
+        -:  174:
+        3:  175:int start_udp_client(const char *hostname, int port) {
+        3:  176:    int sock = 0;
+        -:  177:    struct sockaddr_in serv_addr;
+        -:  178:    struct hostent *he;
+        -:  179:    char buffer[255];
+        -:  180:    fd_set readfds;
+        -:  181:    struct timeval tv;
+        -:  182:    int retval;
+        -:  183:
+       3*:  184:    if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) { printf("\nSocket creation error\n"); return -1; }
+        -:  185:
+       3*:  186:    if ((he = gethostbyname(hostname)) == NULL) { printf("\nInvalid hostname\n"); return -1; }
+        -:  187:
+        3:  188:    serv_addr.sin_family = AF_INET;
+        3:  189:    serv_addr.sin_port = htons(port);
+        3:  190:    memcpy(&serv_addr.sin_addr, he->h_addr_list[0], he->h_length);
+        -:  191:
+        -:  192:    // Send initial connection message to server
+        3:  193:    sendto(sock, "connect", 7, 0, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
+        -:  194:
+        3:  195:    printf("connection made, put input:\n");
+        -:  196:
+        -:  197:    // Make the socket non-blocking
+        3:  198:    int flags = fcntl(sock, F_GETFL, 0);
+        3:  199:    fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+        -:  200:
+        3:  201:    socklen_t addr_len = sizeof(serv_addr);
+       12:  202:    while (1) {
+      255:  203:        FD_ZERO(&readfds);
+       15:  204:        FD_SET(sock, &readfds);
+       15:  205:        tv.tv_sec = 0;
+       15:  206:        tv.tv_usec = 200000;
+       15:  207:        retval = select(sock + 1, &readfds, NULL, NULL, &tv);
+       15:  208:        tv.tv_usec = 0;
+      15*:  209:        if (retval == -1) { perror("select()");
+       15:  210:        } else if (retval) {
+        2:  211:            memset(buffer, 0, sizeof(buffer));
+        2:  212:            ssize_t bytesRead = recvfrom(sock, buffer, sizeof(buffer) - 1, 0, (struct sockaddr *)&serv_addr, &addr_len);
+        2:  213:            buffer[bytesRead] = '\0';
+       2*:  214:            if (bytesRead <= 0) { printf("problem receiving"); return -1; }
+        2:  215:            if (bytesRead == 1) { break; }
+    #####:  216:            printf("%s\n", buffer);
+        -:  217:        }
+        -:  218:
+       13:  219:        printf("Enter position to play (single character). (0 for exit)\n");
+       13:  220:        char input = getchar();
+       13:  221:        getchar(); // Consume the newline character
+       13:  222:        sendto(sock, &input, 1, 0, (struct sockaddr *)&serv_addr, addr_len); // Send a single character
+       13:  223:        if (input == '0') { // Check for exit condition
+        1:  224:            break;
+        -:  225:        }
+       12:  226:        printf("Sent: %c\n", input);
+       12:  227:        fflush(stdout);
+        -:  228:    }
+        3:  229:    close(sock);
+        3:  230:    return 0;
+        -:  231:}
+        -:  232:
+        1:  233:int start_uds_stream_server(const char *path, char mode, char args[9]) {
+        1:  234:    printf("server received mode %c\n", mode);
+        1:  235:    printf("bot will play %s\n", args);
+        -:  236:
+        -:  237:    int server_fd, new_socket;
+        -:  238:    struct sockaddr_un address;
+        1:  239:    int addrlen = sizeof(address);
+        -:  240:
+       1*:  241:    if ((server_fd = socket(AF_UNIX, SOCK_STREAM, 0)) == 0) { perror("socket failed"); exit(EXIT_FAILURE); }
+        -:  242:
+        1:  243:    address.sun_family = AF_UNIX;
+        1:  244:    strncpy(address.sun_path, path, sizeof(address.sun_path) - 1);
+        1:  245:    unlink(path);
+        -:  246:
+       1*:  247:    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) { perror("bind failed"); exit(EXIT_FAILURE); }
+        -:  248:
+       1*:  249:    if (listen(server_fd, 1) < 0) { perror("listen"); exit(EXIT_FAILURE); }
+        -:  250:
+       1*:  251:    if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen)) < 0) { perror("accept"); exit(EXIT_FAILURE); }
+        -:  252:
+        1:  253:    printf("accepted with mode %c\n", mode);
+        1:  254:    sleep(1);
+        -:  255:
+        1:  256:    pid_t pid = fork();
+       1*:  257:    if (pid < 0) { printf("fork failed"); close(new_socket); close(server_fd); exit(EXIT_FAILURE); }
+        -:  258:
+        1:  259:    if (pid == 0) { // Child process
+    #####:  260:        switch (mode) {
+    #####:  261:            case 'i':
+    #####:  262:                dup2(new_socket, STDIN_FILENO); break;
+    #####:  263:            default:
+    #####:  264:                break;
+        -:  265:        }
+    #####:  266:        close(server_fd);
+        -:  267:        
+    #####:  268:        char *args1[] = {"ttt", args, NULL};
+    #####:  269:        char *path = "../Question1/ttt";
+    #####:  270:        execvp(path, args1);
+        -:  271:        // If execvp fails
+    #####:  272:        perror("execvp failed"); exit(EXIT_FAILURE);
+        -:  273:    } else {
+        -:  274:        // Parent process
+        1:  275:        waitpid(pid, NULL, 0);
+        1:  276:        printf("game finished\n");
+        1:  277:        write(new_socket, "1", 1);
+        1:  278:        close(new_socket);
+        -:  279:    }
+        -:  280:
+        1:  281:    close(server_fd);
+        1:  282:    return 0;
+        -:  283:}
+        -:  284:
+        3:  285:int start_uds_stream_client(const char *path) {
+        3:  286:    int sock = 0;
+        -:  287:    struct sockaddr_un serv_addr;
+        -:  288:    char buffer[255];
+        -:  289:    fd_set readfds;
+        -:  290:    struct timeval tv;
+        -:  291:    int retval;
+        -:  292:
+       3*:  293:    if ((sock = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) { printf("\nSocket creation error\n"); return -1; }
+        -:  294:
+        3:  295:    serv_addr.sun_family = AF_UNIX;
+        3:  296:    strncpy(serv_addr.sun_path, path, sizeof(serv_addr.sun_path) - 1);
+        -:  297:
+       3*:  298:    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) { printf("\nConnection Failed\n"); return -1;
+        -:  299:    }
+        3:  300:    printf("connection made, put input:\n");
+        -:  301:
+        -:  302:    // Make the socket non-blocking
+        3:  303:    int flags = fcntl(sock, F_GETFL, 0);
+        3:  304:    fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+        -:  305:
+       12:  306:    while (1) {
+      255:  307:        FD_ZERO(&readfds);
+       15:  308:        FD_SET(sock, &readfds);
+       15:  309:        tv.tv_sec = 0;
+       15:  310:        tv.tv_usec = 200000;
+       15:  311:        retval = select(sock + 1, &readfds, NULL, NULL, &tv);
+       15:  312:        tv.tv_usec = 0;
+      15*:  313:        if (retval == -1) { perror("select()"); } 
+       15:  314:        else if (retval) { 
+        1:  315:            memset(buffer, 0, sizeof(buffer));
+        1:  316:            size_t bytesRead = read(sock, buffer, sizeof(buffer)-1);
+        1:  317:            buffer[bytesRead] = '\0';
+       1*:  318:            if(bytesRead <= 0){ printf("problem receiving"); return -1; }
+        1:  319:            if(bytesRead == 1){ break; }
+        -:  320:        }
+        -:  321:    
+       14:  322:        printf("Enter position to play (single character). (0 for exit)\n");
+       14:  323:        char input = getchar();
+       14:  324:        getchar(); // Consume the newline character
+       14:  325:        write(sock, &input, 1); // Send a single character
+       14:  326:        if (input == '0') { // Check for exit condition
+        2:  327:            break;
+        -:  328:        }
+       12:  329:        printf("Sent: %c\n", input);
+       12:  330:        fflush(stdout);
+        -:  331:    }
+        3:  332:    close(sock);
+        3:  333:    return 0;
+        -:  334:}
+        -:  335:
+        3:  336:int start_uds_dgram_server(const char *path, char mode, char args[9]) {
+        3:  337:    printf("server received mode %c\n", mode);
+        3:  338:    printf("bot will play %s\n", args);
+        -:  339:
+        -:  340:    int server_fd;
+        -:  341:    struct sockaddr_un address;
+        -:  342:    char buffer[255];
+        -:  343:
+       3*:  344:    if ((server_fd = socket(AF_UNIX, SOCK_DGRAM, 0)) < 0) { perror("socket failed"); exit(EXIT_FAILURE); }
+        -:  345:
+        3:  346:    address.sun_family = AF_UNIX;
+        3:  347:    strncpy(address.sun_path, path, sizeof(address.sun_path) - 1);
+        3:  348:    unlink(path);
+        -:  349:
+       3*:  350:    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) { perror("bind failed"); exit(EXIT_FAILURE); }
+        -:  351:
+        -:  352:    struct sockaddr_un client_addr;
+        3:  353:    socklen_t client_len = sizeof(client_addr);
+       3*:  354:    if (recvfrom(server_fd, buffer, sizeof(buffer), 0, (struct sockaddr *)&client_addr, &client_len) < 0) { perror("recvfrom failed"); exit(EXIT_FAILURE); }
+        3:  355:    printf("accepted with mode %c\n", mode);
+        -:  356:
+        3:  357:    pid_t pid = fork();
+       3*:  358:    if (pid < 0) { printf("fork failed"); close(server_fd); exit(EXIT_FAILURE); }
+        -:  359:
+        3:  360:    if (pid == 0) { // Child process
+    #####:  361:        switch (mode) {
+    #####:  362:            case 'i':
+    #####:  363:                dup2(server_fd, STDIN_FILENO); break;
+    #####:  364:            default:
+    #####:  365:                break;
+        -:  366:        }
+    #####:  367:        close(server_fd);
+        -:  368:        
+    #####:  369:        char *args1[] = {"ttt", args, NULL};
+    #####:  370:        char *path = "../Question1/ttt";
+    #####:  371:        execvp(path, args1);
+        -:  372:        // If execvp fails
+    #####:  373:        perror("execvp failed"); exit(EXIT_FAILURE);
+        -:  374:    } else {
+        -:  375:        // Parent process
+        3:  376:        waitpid(pid, NULL, 0);
+        3:  377:        printf("game finished\n");
+        3:  378:        sendto(server_fd, "1", 1, 0, (struct sockaddr *)&client_addr, client_len);
+        -:  379:    }
+        -:  380:
+        3:  381:    close(server_fd);
+        3:  382:    return 0;
+        -:  383:}
+        -:  384:
+        3:  385:int start_uds_dgram_client(const char *path) {
+        -:  386:    int sock;
+        -:  387:    struct sockaddr_un serv_addr;
+        -:  388:    char buffer[255];
+        -:  389:    fd_set readfds;
+        -:  390:    struct timeval tv;
+        -:  391:    int retval;
+        -:  392:
+       3*:  393:    if ((sock = socket(AF_UNIX, SOCK_DGRAM, 0)) < 0) { printf("\nSocket creation error\n"); return -1; }
+        -:  394:
+        3:  395:    serv_addr.sun_family = AF_UNIX;
+        3:  396:    strncpy(serv_addr.sun_path, path, sizeof(serv_addr.sun_path) - 1);
+        -:  397:
+        3:  398:    printf("connection made, put input:\n");
+        -:  399:
+        -:  400:    // Make the socket non-blocking
+        3:  401:    int flags = fcntl(sock, F_GETFL, 0);
+        3:  402:    fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+        -:  403:
+       12:  404:    while (1) {
+      255:  405:        FD_ZERO(&readfds);
+       15:  406:        FD_SET(sock, &readfds);
+       15:  407:        tv.tv_sec = 0;
+       15:  408:        tv.tv_usec = 100000;
+       15:  409:        retval = select(sock + 1, &readfds, NULL, NULL, &tv);
+       15:  410:        tv.tv_usec = 0;
+      15*:  411:        if (retval == -1) { perror("select()");
+       15:  412:        } else if (retval) {
+    #####:  413:            memset(buffer, 0, sizeof(buffer));
+        -:  414:            struct sockaddr_un from;
+    #####:  415:            socklen_t fromlen = sizeof(from);
+    #####:  416:            ssize_t len = recvfrom(sock, buffer, sizeof(buffer) - 1, 0, (struct sockaddr *)&from, &fromlen);
+    #####:  417:            if (len < 0) { perror("recvfrom failed"); return -1; }
+    #####:  418:            buffer[len] = '\0';
+    #####:  419:            if (len == 1) {
+    #####:  420:                break;
+        -:  421:            }
+        -:  422:        }
+        -:  423:
+       15:  424:        printf("Enter position to play (single character). (0 for exit)\n");
+       15:  425:        char input = getchar();
+       15:  426:        getchar(); // Consume the newline character
+       15:  427:        sendto(sock, &input, 1, 0, (struct sockaddr *)&serv_addr, sizeof(serv_addr)); // Send a single character
+       15:  428:        if (input == '0') { // Check for exit condition
+        3:  429:            break;
+        -:  430:        }
+       12:  431:        printf("Sent: %c\n", input);
+       12:  432:        fflush(stdout);
+        -:  433:    }
+        -:  434:
+        3:  435:    close(sock);
+        3:  436:    return 0;
+        -:  437:}
+        -:  438:
+        -:  439:
+       28:  440:int main(int argc, char *argv[]) {
+       28:  441:    if (argc < 3) {
+    #####:  442:        fprintf(stderr, "Server Usage1: %s -e \"ttt 123456789\" -i TCPS4050\nServer Usage2: %s -e \"ttt 123456789\" -b TCPS4050\nClient Usage: %s -e \"ttt 123456789\" -o TCPClocalhost,4050\n\n", argv[0], argv[0], argv[0]);
+    #####:  443:        fprintf(stderr, "Server Usage: %s -e \"ttt 123456789\" -i UDPS4050\nClient Usage: %s -e \"ttt 123456789\" -o UDPClocalhost,4050\n\n", argv[0], argv[0]);
+    #####:  444:        fprintf(stderr, "Server Usage1: %s -e \"ttt 123456789\" -i UDSSD\"/tmp/socket1\" client_output.txt\nServer Usage2: %s -e \"ttt 123456789\" -i UDSSS\"/tmp/socket1\" client_output.txt\nClient Usage1: %s -e \"ttt 123456789\" -o UDSCD\"/tmp/socket1\" client_output.txt\nClient Usage2: %s -e \"ttt 123456789\" -o UDSCS\"/tmp/socket1\" client_output.txt\n", argv[0], argv[0], argv[0], argv[0]);
+    #####:  445:        return 1;
+        -:  446:    }
+        -:  447:
+       28:  448:    int both_fd = -1;
+       28:  449:    char mode = *(argv[3] + 1);
+       28:  450:    printf("mode: %c\n", mode);
+       28:  451:    fflush(stdout);
+        -:  452:    char command[9];
+        -:  453:
+      107:  454:    for (int i = 1; i < argc; ++i) {
+       94:  455:        if (strcmp(argv[i], "-e") == 0 && i + 1 < argc) {
+       28:  456:            strncpy(command, argv[2] + 4, 10);
+       28:  457:            command[9] = '\0';
+        -:  458:        }
+       66:  459:        else if (strcmp(argv[i], "-i") == 0 && i + 1 < argc) {
+       10:  460:            printf("received i\n");
+       10:  461:            if (strncmp(argv[i + 1], "UDSSD", 5) == 0) {
+        3:  462:                const char *path = argv[++i] + 5;
+        3:  463:                start_uds_dgram_server(path, mode, command);
+        3:  464:                printf("starting server with path: %s\n", path);
+        -:  465:            }
+       10:  466:            if (strncmp(argv[i + 1], "UDSSS", 5) == 0) {
+        1:  467:                const char *path = argv[++i] + 5;
+        1:  468:                start_uds_stream_server(path, mode, command);
+        1:  469:                printf("starting server with path: %s\n", path);
+        -:  470:            }
+       10:  471:            if (strncmp(argv[i + 1], "UDPS", 4) == 0) {
+        3:  472:                int port = atoi(argv[++i] + 4);
+        3:  473:                start_udp_server(port, mode, command);
+        3:  474:                printf("starting server with port: %d", port);
+        3:  475:                return 0;
+        -:  476:            }
+        7:  477:            if (strncmp(argv[i + 1], "TCPS", 4) == 0) {
+        3:  478:                int port = atoi(argv[++i] + 4);
+        3:  479:                start_tcp_server(port, mode, command);
+        3:  480:                printf("starting server with port: %d", port);
+        3:  481:                return 0;
+        -:  482:            }
+        -:  483:        }
+       56:  484:        else if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
+       15:  485:            if (strncmp(argv[i + 1], "UDSCD", 5) == 0) {
+        3:  486:                const char *path = argv[++i] + 5;
+        3:  487:                start_uds_dgram_client(path);
+        -:  488:            }
+       15:  489:            if (strncmp(argv[i + 1], "UDSCS", 5) == 0) {
+        3:  490:                const char *path = argv[++i] + 5;
+        3:  491:                start_uds_stream_client(path);
+        -:  492:            }
+       15:  493:            if (strncmp(argv[i + 1], "UDPC", 4) == 0) {
+        3:  494:                char *host_port = argv[++i] + 4;
+        3:  495:                char *host = strtok(host_port, ",");
+        3:  496:                if (host != NULL) {
+        3:  497:                    int port = atoi(strtok(NULL, ","));
+        3:  498:                    start_udp_client(host, port);
+        -:  499:                }
+        3:  500:                return 0;
+        -:  501:            }
+       12:  502:            if (strncmp(argv[i + 1], "TCPC", 4) == 0){
+        6:  503:                char *host_port = argv[++i] + 4;
+        6:  504:                char *host = strtok(host_port, ",");
+        6:  505:                if (host != NULL){
+        6:  506:                    int port = atoi(strtok(NULL, ","));
+        6:  507:                    start_tcp_client(host, port);
+        -:  508:                }
+        6:  509:                return 0;
+        -:  510:            }
+        -:  511:        }
+       41:  512:        else if (strcmp(argv[i], "-b") == 0 && i + 1 < argc){
+        3:  513:            if (strncmp(argv[i + 1], "TCPS", 4) == 0){
+        3:  514:                int port = atoi(argv[++i] + 4);
+        3:  515:                both_fd = start_tcp_server(port, mode, command);
+        -:  516:            }
+        -:  517:        }
+        -:  518:    }
+        -:  519:
+       13:  520:    if (both_fd != -1) {
+        3:  521:        dup2(both_fd, STDIN_FILENO);
+        3:  522:        dup2(both_fd, STDOUT_FILENO);
+        -:  523:    }
+        -:  524:
+       13:  525:    return 0;
+        -:  526:}

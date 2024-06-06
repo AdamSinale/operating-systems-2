@@ -50,8 +50,8 @@ int start_tcp_server(int port, char mode, char args[9]){
     }
     printf("accepted with mode %c\n", mode);
     sleep(1);
-
-    // write(new_socket, mode, 1);
+    write(new_socket, &mode, 1);
+    sleep(1);
 
     pid_t pid = fork();
     if (pid < 0) {
@@ -82,13 +82,11 @@ int start_tcp_server(int port, char mode, char args[9]){
         printf("child came back\n");
 
         // If execvp fails
-        perror("execvp failed");
-        exit(EXIT_FAILURE);
+        perror("execvp failed"); exit(EXIT_FAILURE);
     } else {
-        // Parent process
+        printf("parent process\n");
         waitpid(pid, NULL, 0);
         printf("game finished\n");
-        write(new_socket, "1",1);
         close(new_socket);
     }
 
@@ -101,9 +99,6 @@ int start_tcp_client(const char *hostname, int port) {
     struct sockaddr_in serv_addr;
     struct hostent *he;
     char buffer[255];
-    fd_set readfds;
-    struct timeval tv;
-    int retval;
 
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         printf("\nSocket creation error\n");
@@ -125,18 +120,17 @@ int start_tcp_client(const char *hostname, int port) {
     }
     printf("connection made, put input:\n");
     // Make the socket non-blocking
-    int flags = fcntl(sock, F_GETFL, 0);
-    fcntl(sock, F_SETFL, flags | O_NONBLOCK);
-
+    memset(buffer, 0, sizeof(buffer));
+    size_t bytesRead = read(sock, buffer, sizeof(buffer)-1);
+    if(bytesRead < 1){
+        printf("problem receiving mode");
+        return -1;
+    }
+    char mode = buffer[0];
+    printf("servers mode is %c\n", mode);
     while (1) {
-        FD_ZERO(&readfds);
-        FD_SET(sock, &readfds);
-        tv.tv_sec = 0;
-        tv.tv_usec = 200000;
-        retval = select(sock + 1, &readfds, NULL, NULL, &tv);
-        tv.tv_usec = 0;
-        if (retval == -1) { perror("select()"); } 
-        else if (retval) { 
+        if(mode == 'b'){
+            printf("\n");
             memset(buffer, 0, sizeof(buffer));
             size_t bytesRead = read(sock, buffer, sizeof(buffer)-1);
             buffer[bytesRead] = '\0';
@@ -148,7 +142,6 @@ int start_tcp_client(const char *hostname, int port) {
             printf("%s\n",buffer);
             if(buffer[bytesRead-2] == 'n' || buffer[bytesRead-2] == 'W' || buffer[bytesRead-2] == 't'){ break; }
         }
-    
         printf("Enter position to play (single character). (0 for exit)\n");
         char input = getchar();
         getchar(); // Consume the newline character
